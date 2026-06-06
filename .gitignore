@@ -1,0 +1,8 @@
+/backend/target
+/backend/Cargo.lock
+/frontend/elm-stuff
+/frontend/dist
+/frontend/*.js
+*.log
+.env
+.DS_Store
