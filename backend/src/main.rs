@@ -13,6 +13,7 @@ mod analysis;
 mod models;
 mod routes;
 
+#[derive(Clone)]
 pub struct AppState {
     db: PgPool,
 }
@@ -45,7 +46,10 @@ async fn main() -> anyhow::Result<()> {
         .allow_headers(Any);
 
     let api_routes = Router::new()
-        .route("/batches", get(routes::list_batches).post(routes::create_batch))
+        .route(
+            "/batches",
+            get(routes::list_batches).post(routes::create_batch),
+        )
         .route("/batches/:id", get(routes::get_batch))
         .route("/batches/:id/report", get(routes::export_report))
         .route("/batches/:id/outbound", patch(routes::mark_outbound))

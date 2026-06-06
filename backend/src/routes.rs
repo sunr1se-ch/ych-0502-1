@@ -9,17 +9,14 @@ use axum::{
     Json,
 };
 use chrono::{DateTime, Utc};
-use http_body_util::Full;
 use sqlx::PgPool;
 use std::collections::BTreeMap;
 
 async fn update_suspect_status(pool: &PgPool, batch_id: i32) -> Result<(), sqlx::Error> {
-    let batch = sqlx::query_as::<_, CocoonBatch>(
-        "SELECT * FROM cocoon_batches WHERE id = $1",
-    )
-    .bind(batch_id)
-    .fetch_one(pool)
-    .await?;
+    let batch = sqlx::query_as::<_, CocoonBatch>("SELECT * FROM cocoon_batches WHERE id = $1")
+        .bind(batch_id)
+        .fetch_one(pool)
+        .await?;
 
     let curves = sqlx::query_as::<_, BoilCurve>(
         "SELECT * FROM boil_curves WHERE batch_id = $1 ORDER BY recorded_at",
@@ -38,13 +35,11 @@ async fn update_suspect_status(pool: &PgPool, batch_id: i32) -> Result<(), sqlx:
     let underheat_segments = detect_underheat_segments(&curves, batch.target_temp);
     let is_suspect = has_suspect_condition(&underheat_segments, &floats);
 
-    sqlx::query(
-        "UPDATE cocoon_batches SET is_suspect = $1 WHERE id = $2",
-    )
-    .bind(is_suspect)
-    .bind(batch_id)
-    .execute(pool)
-    .await?;
+    sqlx::query("UPDATE cocoon_batches SET is_suspect = $1 WHERE id = $2")
+        .bind(is_suspect)
+        .bind(batch_id)
+        .execute(pool)
+        .await?;
 
     Ok(())
 }
@@ -52,12 +47,11 @@ async fn update_suspect_status(pool: &PgPool, batch_id: i32) -> Result<(), sqlx:
 pub async fn list_batches(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<CocoonBatch>>, (StatusCode, String)> {
-    let batches = sqlx::query_as::<_, CocoonBatch>(
-        "SELECT * FROM cocoon_batches ORDER BY created_at DESC",
-    )
-    .fetch_all(&state.db)
-    .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let batches =
+        sqlx::query_as::<_, CocoonBatch>("SELECT * FROM cocoon_batches ORDER BY created_at DESC")
+            .fetch_all(&state.db)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     Ok(Json(batches))
 }
@@ -85,22 +79,20 @@ pub async fn get_batch(
     State(state): State<AppState>,
     Path(id): Path<i32>,
 ) -> Result<Json<BatchDetail>, (StatusCode, String)> {
-    let batch = sqlx::query_as::<_, CocoonBatch>(
-        "SELECT * FROM cocoon_batches WHERE id = $1",
-    )
-    .bind(id)
-    .fetch_one(&state.db)
-    .await
-    .map_err(|e| {
-        if e.as_database_error()
-            .and_then(|d| d.is_unique_violation())
-            .is_some()
-        {
-            (StatusCode::CONFLICT, e.to_string())
-        } else {
-            (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
-        }
-    })?;
+    let batch = sqlx::query_as::<_, CocoonBatch>("SELECT * FROM cocoon_batches WHERE id = $1")
+        .bind(id)
+        .fetch_one(&state.db)
+        .await
+        .map_err(|e| {
+            if e.as_database_error()
+                .and_then(|d| d.is_unique_violation())
+                .is_some()
+            {
+                (StatusCode::CONFLICT, e.to_string())
+            } else {
+                (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+            }
+        })?;
 
     let boil_curves = sqlx::query_as::<_, BoilCurve>(
         "SELECT * FROM boil_curves WHERE batch_id = $1 ORDER BY recorded_at",
@@ -174,13 +166,11 @@ pub async fn mark_outbound(
     State(state): State<AppState>,
     Path(id): Path<i32>,
 ) -> Result<Response, (StatusCode, String)> {
-    let batch = sqlx::query_as::<_, CocoonBatch>(
-        "SELECT * FROM cocoon_batches WHERE id = $1",
-    )
-    .bind(id)
-    .fetch_one(&state.db)
-    .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let batch = sqlx::query_as::<_, CocoonBatch>("SELECT * FROM cocoon_batches WHERE id = $1")
+        .bind(id)
+        .fetch_one(&state.db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     if batch.is_suspect {
         return Ok((
@@ -215,13 +205,11 @@ pub async fn export_report(
     State(state): State<AppState>,
     Path(id): Path<i32>,
 ) -> Result<Response, (StatusCode, String)> {
-    let batch = sqlx::query_as::<_, CocoonBatch>(
-        "SELECT * FROM cocoon_batches WHERE id = $1",
-    )
-    .bind(id)
-    .fetch_one(&state.db)
-    .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let batch = sqlx::query_as::<_, CocoonBatch>("SELECT * FROM cocoon_batches WHERE id = $1")
+        .bind(id)
+        .fetch_one(&state.db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     let boil_curves = sqlx::query_as::<_, BoilCurve>(
         "SELECT * FROM boil_curves WHERE batch_id = $1 ORDER BY recorded_at",
@@ -244,23 +232,17 @@ pub async fn export_report(
     let mut time_map: BTreeMap<DateTime<Utc>, (Option<f64>, Option<f64>)> = BTreeMap::new();
 
     for curve in &boil_curves {
-        time_map
-            .entry(curve.recorded_at)
-            .or_insert((None, None))
-            .0 = Some(curve.temp_c);
+        time_map.entry(curve.recorded_at).or_insert((None, None)).0 = Some(curve.temp_c);
     }
 
     for event in &float_events {
-        time_map
-            .entry(event.recorded_at)
-            .or_insert((None, None))
-            .1 = Some(event.float_ratio_pct);
+        time_map.entry(event.recorded_at).or_insert((None, None)).1 = Some(event.float_ratio_pct);
     }
 
     let is_underheat_time = |time: &DateTime<Utc>| -> bool {
-        underheat_segments.iter().any(|seg| {
-            *time >= seg.start_time && *time <= seg.end_time
-        })
+        underheat_segments
+            .iter()
+            .any(|seg| *time >= seg.start_time && *time <= seg.end_time)
     };
 
     let mut wtr = csv::Writer::from_writer(vec![]);
@@ -292,12 +274,9 @@ pub async fn export_report(
         .into_inner()
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    let filename = format!(
-        "attachment; filename=\"batch_{}_report.csv\"",
-        id
-    );
+    let filename = format!("attachment; filename=\"batch_{}_report.csv\"", id);
 
-    let body = Body::from(Full::from(csv_data));
+    let body = Body::from(csv_data);
 
     let mut response = Response::new(body);
     *response.status_mut() = StatusCode::OK;

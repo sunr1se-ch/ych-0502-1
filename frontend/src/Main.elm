@@ -10,9 +10,9 @@ import Json.Decode as D
 import Json.Encode as E
 import Time exposing (Posix)
 import Url
-import Url.Parser as Parser exposing ((</>), Parser, int, s, string)
-import Svg exposing (..)
-import Svg.Attributes as SA exposing (..)
+import Url.Parser as Parser exposing ((</>), Parser, int, string)
+import Svg
+import Svg.Attributes as SA
 
 
 
@@ -149,7 +149,7 @@ routeParser : Parser (Route -> a) a
 routeParser =
     Parser.oneOf
         [ Parser.map ListRoute Parser.top
-        , Parser.map DetailRoute (s "batch" </> int)
+        , Parser.map DetailRoute (Parser.s "batch" </> int)
         ]
 
 
@@ -277,7 +277,13 @@ update msg model =
 
                 updatedSelected =
                     Maybe.map
-                        (\d -> { d | batch = { d.batch | status = "outbound" } })
+                        (\d ->
+                            let
+                                b = d.batch
+                                updatedBatch = { b | status = "outbound" }
+                            in
+                            { d | batch = updatedBatch }
+                        )
                         model.selectedBatch
             in
             ( { model | batches = updatedBatches, selectedBatch = updatedSelected, outboundError = Nothing }
@@ -764,7 +770,7 @@ createBatchFormView model =
                     [ type_ "text"
                     , placeholder "如：双宫茧"
                     , value model.newBatchForm.cocoonType
-                    , onInput (\v -> UpdateForm { model.newBatchForm | cocoonType = v })
+                    , onInput (\v -> UpdateForm (setCocoonType model.newBatchForm v))
                     , inputStyle
                     , required True
                     ]
@@ -783,7 +789,7 @@ createBatchFormView model =
                     [ type_ "number"
                     , placeholder "如：100"
                     , value model.newBatchForm.targetReelingKg
-                    , onInput (\v -> UpdateForm { model.newBatchForm | targetReelingKg = v })
+                    , onInput (\v -> UpdateForm (setTargetReelingKg model.newBatchForm v))
                     , inputStyle
                     , step "0.01"
                     , required True
@@ -803,7 +809,7 @@ createBatchFormView model =
                     [ type_ "number"
                     , placeholder "如：98"
                     , value model.newBatchForm.targetTemp
-                    , onInput (\v -> UpdateForm { model.newBatchForm | targetTemp = v })
+                    , onInput (\v -> UpdateForm (setTargetTemp model.newBatchForm v))
                     , inputStyle
                     , step "0.1"
                     , required True
@@ -1028,16 +1034,19 @@ dualAxisChart detail =
             (List.map .recorded_at detail.boil_curves)
                 ++ (List.map .recorded_at detail.float_events)
 
+        allMillis =
+            List.map Time.posixToMillis allTimes
+
+        sortedMillis =
+            List.sort allMillis
+
         ( minTime, maxTime ) =
-            case ( List.sort allTimes, List.sort allTimes ) of
-                ( [], [] ) ->
+            case sortedMillis of
+                [] ->
                     ( 0, 1 )
 
-                ( a :: _, b :: _ ) ->
-                    ( toFloat (Time.posixToMillis a), toFloat (Time.posixToMillis (List.reverse b |> List.head |> Maybe.withDefault a)) )
-
-                _ ->
-                    ( 0, 1 )
+                first :: rest ->
+                    ( toFloat first, toFloat (Maybe.withDefault first (List.head (List.reverse rest))) )
 
         timeRange =
             maxTime - minTime
@@ -1085,10 +1094,10 @@ dualAxisChart detail =
                 , legendItem "#fecaca" "█" "低温段"
                 ]
             ]
-        , svg
+        , Svg.svg
             [ SA.width (String.fromFloat dim.width)
             , SA.height (String.fromFloat dim.height)
-            , viewBox ("0 0 " ++ String.fromFloat dim.width ++ " " ++ String.fromFloat dim.height)
+            , SA.viewBox ("0 0 " ++ String.fromFloat dim.width ++ " " ++ String.fromFloat dim.height)
             , style "width" "100%"
             , style "height" "auto"
             ]
@@ -1115,7 +1124,7 @@ legendItem color icon label =
         ]
 
 
-underheatHighlight : ChartDim -> Float -> Float -> (Posix -> Float) -> BatchDetail -> List (Svg msg)
+underheatHighlight : ChartDim -> Float -> Float -> (Posix -> Float) -> BatchDetail -> List (Svg.Svg msg)
 underheatHighlight dim innerWidth innerHeight timeScale detail =
     List.map
         (\seg ->
@@ -1126,10 +1135,10 @@ underheatHighlight dim innerWidth innerHeight timeScale detail =
                 x2 =
                     timeScale seg.end_time
             in
-            rect
+            Svg.rect
                 [ SA.x (String.fromFloat x1)
                 , SA.y (String.fromFloat dim.margin.top)
-                , SA.width (String.fromFloat (max (x2 - x1) 2))
+                , SA.width (String.fromFloat (Basics.max (x2 - x1) 2))
                 , SA.height (String.fromFloat innerHeight)
                 , SA.fill "#fecaca"
                 , SA.opacity "0.3"
@@ -1139,18 +1148,18 @@ underheatHighlight dim innerWidth innerHeight timeScale detail =
         detail.underheat_segments
 
 
-gridLines : ChartDim -> Float -> Float -> Float -> Float -> List (Svg msg)
+gridLines : ChartDim -> Float -> Float -> Float -> Float -> List (Svg.Svg msg)
 gridLines dim innerWidth innerHeight tempMin tempMax =
     let
         tempSteps =
-            [ 90, 92, 94, 96, 98, 100, 102, 104 ]
+            [ 90.0, 92.0, 94.0, 96.0, 98.0, 100.0, 102.0, 104.0 ]
 
         tempScale temp =
             dim.margin.top + (1 - (temp - tempMin) / (tempMax - tempMin)) * innerHeight
     in
     List.map
         (\t ->
-            line
+            Svg.line
                 [ SA.x1 (String.fromFloat dim.margin.left)
                 , SA.y1 (String.fromFloat (tempScale t))
                 , SA.x2 (String.fromFloat (dim.margin.left + innerWidth))
@@ -1163,9 +1172,9 @@ gridLines dim innerWidth innerHeight tempMin tempMax =
         tempSteps
 
 
-tempThresholdLine : ChartDim -> Float -> Float -> (Float -> Float) -> List (Svg msg)
+tempThresholdLine : ChartDim -> Float -> Float -> (Float -> Float) -> List (Svg.Svg msg)
 tempThresholdLine dim innerWidth threshold tempScale =
-    [ line
+    [ Svg.line
         [ SA.x1 (String.fromFloat dim.margin.left)
         , SA.y1 (String.fromFloat (tempScale threshold))
         , SA.x2 (String.fromFloat (dim.margin.left + innerWidth))
@@ -1178,11 +1187,11 @@ tempThresholdLine dim innerWidth threshold tempScale =
     ]
 
 
-tempCurve : ChartDim -> Float -> Float -> (Posix -> Float) -> (Float -> Float) -> List BoilCurve -> List (Svg msg)
+tempCurve : ChartDim -> Float -> Float -> (Posix -> Float) -> (Float -> Float) -> List BoilCurve -> List (Svg.Svg msg)
 tempCurve dim innerWidth innerHeight timeScale tempScale curves =
     let
         sorted =
-            List.sortBy .recorded_at curves
+            List.sortBy (Time.posixToMillis << .recorded_at) curves
 
         pathData =
             case sorted of
@@ -1221,7 +1230,7 @@ tempCurve dim innerWidth innerHeight timeScale tempScale curves =
     ]
         ++ (List.map
                 (\c ->
-                    circle
+                    Svg.circle
                         [ SA.cx (String.fromFloat (timeScale c.recorded_at))
                         , SA.cy (String.fromFloat (tempScale c.temp_c))
                         , SA.r "3"
@@ -1235,11 +1244,11 @@ tempCurve dim innerWidth innerHeight timeScale tempScale curves =
            )
 
 
-floatPoints : ChartDim -> (Posix -> Float) -> (Float -> Float) -> List FloatEvent -> List (Svg msg)
+floatPoints : ChartDim -> (Posix -> Float) -> (Float -> Float) -> List FloatEvent -> List (Svg.Svg msg)
 floatPoints dim timeScale floatScale events =
     let
         sorted =
-            List.sortBy .recorded_at events
+            List.sortBy (Time.posixToMillis << .recorded_at) events
 
         pathData =
             case sorted of
@@ -1286,8 +1295,8 @@ floatPoints dim timeScale floatScale events =
                             else
                                 "#10b981"
                     in
-                    g []
-                        [ polygon
+                    Svg.g []
+                        [ Svg.polygon
                             [ SA.points
                                 (let
                                     x =
@@ -1326,16 +1335,16 @@ floatPoints dim timeScale floatScale events =
            )
 
 
-tempAxis : ChartDim -> Float -> Float -> Float -> Float -> List (Svg msg)
+tempAxis : ChartDim -> Float -> Float -> Float -> Float -> List (Svg.Svg msg)
 tempAxis dim innerWidth innerHeight tempMin tempMax =
     let
         tempSteps =
-            [ 90, 95, 100, 105 ]
+            [ 90.0, 95.0, 100.0, 105.0 ]
 
         tempScale temp =
             dim.margin.top + (1 - (temp - tempMin) / (tempMax - tempMin)) * innerHeight
     in
-    [ line
+    [ Svg.line
         [ SA.x1 (String.fromFloat dim.margin.left)
         , SA.y1 (String.fromFloat dim.margin.top)
         , SA.x2 (String.fromFloat dim.margin.left)
@@ -1344,7 +1353,7 @@ tempAxis dim innerWidth innerHeight tempMin tempMax =
         , SA.strokeWidth "1.5"
         ]
         []
-    , text_
+    , Svg.text_
         [ SA.x (String.fromFloat (dim.margin.left - 45))
         , SA.y (String.fromFloat (dim.margin.top + innerHeight / 2))
         , SA.fill "#374151"
@@ -1357,8 +1366,8 @@ tempAxis dim innerWidth innerHeight tempMin tempMax =
     ]
         ++ (List.map
                 (\t ->
-                    g []
-                        [ line
+                    Svg.g []
+                        [ Svg.line
                             [ SA.x1 (String.fromFloat (dim.margin.left - 5))
                             , SA.y1 (String.fromFloat (tempScale t))
                             , SA.x2 (String.fromFloat dim.margin.left)
@@ -1367,33 +1376,33 @@ tempAxis dim innerWidth innerHeight tempMin tempMax =
                             , SA.strokeWidth "1.5"
                             ]
                             []
-                        , text_
+                        , Svg.text_
                             [ SA.x (String.fromFloat (dim.margin.left - 10))
                             , SA.y (String.fromFloat (tempScale t + 4))
                             , SA.fill "#374151"
                             , SA.fontSize "11"
                             , SA.textAnchor "end"
                             ]
-                            [ text (String.fromInt t) ]
+                            [ text (String.fromFloat (round t |> toFloat)) ]
                         ]
                 )
                 tempSteps
            )
 
 
-floatAxis : ChartDim -> Float -> Float -> List (Svg msg)
+floatAxis : ChartDim -> Float -> Float -> List (Svg.Svg msg)
 floatAxis dim innerWidth innerHeight =
     let
         rightX =
             dim.margin.left + innerWidth
 
         floatSteps =
-            [ 0, 25, 50, 75, 100 ]
+            [ 0.0, 25.0, 50.0, 75.0, 100.0 ]
 
         floatScale ratio =
             dim.margin.top + (1 - ratio / 100.0) * innerHeight
     in
-    [ line
+    [ Svg.line
         [ SA.x1 (String.fromFloat rightX)
         , SA.y1 (String.fromFloat dim.margin.top)
         , SA.x2 (String.fromFloat rightX)
@@ -1402,7 +1411,7 @@ floatAxis dim innerWidth innerHeight =
         , SA.strokeWidth "1.5"
         ]
         []
-    , text_
+    , Svg.text_
         [ SA.x (String.fromFloat (rightX + 45))
         , SA.y (String.fromFloat (dim.margin.top + innerHeight / 2))
         , SA.fill "#10b981"
@@ -1415,8 +1424,8 @@ floatAxis dim innerWidth innerHeight =
     ]
         ++ (List.map
                 (\r ->
-                    g []
-                        [ line
+                    Svg.g []
+                        [ Svg.line
                             [ SA.x1 (String.fromFloat rightX)
                             , SA.y1 (String.fromFloat (floatScale r))
                             , SA.x2 (String.fromFloat (rightX + 5))
@@ -1425,20 +1434,20 @@ floatAxis dim innerWidth innerHeight =
                             , SA.strokeWidth "1.5"
                             ]
                             []
-                        , text_
+                        , Svg.text_
                             [ SA.x (String.fromFloat (rightX + 10))
                             , SA.y (String.fromFloat (floatScale r + 4))
                             , SA.fill "#374151"
                             , SA.fontSize "11"
                             ]
-                            [ text (String.fromInt r) ]
+                            [ text (String.fromFloat (round r |> toFloat)) ]
                         ]
                 )
                 floatSteps
            )
 
 
-timeAxis : ChartDim -> Float -> Float -> Float -> Float -> List (Svg msg)
+timeAxis : ChartDim -> Float -> Float -> Float -> Float -> List (Svg.Svg msg)
 timeAxis dim innerWidth innerHeight minTime maxTime =
     let
         bottomY =
@@ -1457,7 +1466,7 @@ timeAxis dim innerWidth innerHeight minTime maxTime =
         timeScale millis =
             dim.margin.left + ((millis - minTime) / timeRange) * innerWidth
     in
-    [ line
+    [ Svg.line
         [ SA.x1 (String.fromFloat dim.margin.left)
         , SA.y1 (String.fromFloat bottomY)
         , SA.x2 (String.fromFloat (dim.margin.left + innerWidth))
@@ -1466,7 +1475,7 @@ timeAxis dim innerWidth innerHeight minTime maxTime =
         , SA.strokeWidth "1.5"
         ]
         []
-    , text_
+    , Svg.text_
         [ SA.x (String.fromFloat (dim.margin.left + innerWidth / 2))
         , SA.y (String.fromFloat (bottomY + 45))
         , SA.fill "#374151"
@@ -1478,8 +1487,8 @@ timeAxis dim innerWidth innerHeight minTime maxTime =
     ]
         ++ (List.map
                 (\t ->
-                    g []
-                        [ line
+                    Svg.g []
+                        [ Svg.line
                             [ SA.x1 (String.fromFloat (timeScale t))
                             , SA.y1 (String.fromFloat bottomY)
                             , SA.x2 (String.fromFloat (timeScale t))
@@ -1488,7 +1497,7 @@ timeAxis dim innerWidth innerHeight minTime maxTime =
                             , SA.strokeWidth "1.5"
                             ]
                             []
-                        , text_
+                        , Svg.text_
                             [ SA.x (String.fromFloat (timeScale t))
                             , SA.y (String.fromFloat (bottomY + 20))
                             , SA.fill "#374151"
@@ -1500,6 +1509,25 @@ timeAxis dim innerWidth innerHeight minTime maxTime =
                 )
                 timeSteps
            )
+
+
+
+-- FORM HELPERS
+
+
+setCocoonType : NewBatchForm -> String -> NewBatchForm
+setCocoonType form v =
+    { form | cocoonType = v }
+
+
+setTargetReelingKg : NewBatchForm -> String -> NewBatchForm
+setTargetReelingKg form v =
+    { form | targetReelingKg = v }
+
+
+setTargetTemp : NewBatchForm -> String -> NewBatchForm
+setTargetTemp form v =
+    { form | targetTemp = v }
 
 
 
@@ -1618,6 +1646,9 @@ formatFloat f =
     String.fromFloat (toFloat (round (f * 100)) / 100)
 
 
-styleList : List ( String, String ) -> Attribute msg
-styleList =
-    String.join "; " << List.map (\( k, v ) -> k ++ ": " ++ v) >> style
+styleList : List ( String, String ) -> Html.Attribute msg
+styleList styles =
+    styles
+        |> List.map (\( k, v ) -> k ++ ": " ++ v)
+        |> String.join "; "
+        |> Html.Attributes.attribute "style"

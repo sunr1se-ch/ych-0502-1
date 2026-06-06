@@ -1,6 +1,10 @@
 /backend/target
 /backend/Cargo.lock
+/backend/.cargo/
+/backend/build_output.txt
+/backend/check_output.txt
 /frontend/elm-stuff
+/frontend/.elm_home/
 /frontend/dist
 /frontend/*.js
 *.log

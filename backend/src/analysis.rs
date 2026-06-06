@@ -1,10 +1,7 @@
 use crate::models::{BoilCurve, FloatEvent, UnderheatSegment};
 use chrono::{DateTime, Duration, Utc};
 
-pub fn detect_underheat_segments(
-    curves: &[BoilCurve],
-    target_temp: f64,
-) -> Vec<UnderheatSegment> {
+pub fn detect_underheat_segments(curves: &[BoilCurve], target_temp: f64) -> Vec<UnderheatSegment> {
     let threshold = target_temp - 2.0;
     let mut segments = Vec::new();
     let mut sorted_curves: Vec<&BoilCurve> = curves.iter().collect();
@@ -56,9 +53,9 @@ pub fn has_suspect_condition(
         let window_start = window[0].recorded_at;
         let window_end = window[4].recorded_at;
 
-        let has_overlap = underheat_segments.iter().any(|seg| {
-            segments_overlap(seg.start_time, seg.end_time, window_start, window_end)
-        });
+        let has_overlap = underheat_segments
+            .iter()
+            .any(|seg| segments_overlap(seg.start_time, seg.end_time, window_start, window_end));
 
         if has_overlap {
             return true;
